@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Control our lights</title>
+
+	<link rel="stylesheet" href="/css/bootstrap.cyborg.min.css">
+	<link rel="stylesheet" href="/css/toastr.min.css">
+	<link rel="stylesheet" href="/css/xterm.css">
+	<link rel="stylesheet" href="/css/coloris.min.css">
+
+	<script src="/socket.io/socket.io.js"></script>
+	<script src="/js/jquery-3.6.3.min.js"></script>
+	<script src="/js/popper.min.js"></script>
+	<script src="/js/toastr.min.js"></script>
+	<script src="/js/bootstrap.min.js"></script>
+	<script src="/js/toastr.min.js"></script>
+	<script src="/js/xterm.js"></script>
+	<script src="/js/xterm-addon-webgl.js"></script>
+	<script src="/js/xterm-addon-web-links.js"></script>
+	<script src="/js/xterm-addon-fit.js"></script>
+	<script src="/js/coloris.min.js"></script>
+
+	<script>
+		function hsvToRgb(h, s, v) {
+			let r, g, b;
+			let i = Math.floor(h * 6);
+			let f = h * 6 - i;
+			let p = v * (1 - s);
+			let q = v * (1 - f * s);
+			let t = v * (1 - (1 - f) * s);
+
+			switch (i % 6) {
+				case 0: [r, g, b] = [v, t, p]; break;
+				case 1: [r, g, b] = [q, v, p]; break;
+				case 2: [r, g, b] = [p, v, t]; break;
+				case 3: [r, g, b] = [p, q, v]; break;
+				case 4: [r, g, b] = [t, p, v]; break;
+				case 5: [r, g, b] = [v, p, q]; break;
+			}
+
+			return [
+				Math.round(r * 255),
+				Math.round(g * 255),
+				Math.round(b * 255)
+			];
+		}
+
+		function generateRandomFullSaturationBrightnessColor() {
+			let h = Math.random();
+			let s = 1;
+			let v = 1;
+
+			return hsvToRgb(h, s, v);
+		}
+
+		function componentToHex(c) {
+			let hex = c.toString(16);
+			return hex.length == 1 ? "0" + hex : hex;
+		}
+
+		function rgbToHex(r, g, b) {
+			return "#" + componentToHex(r) + componentToHex(g) + componentToHex(b);
+		}
+
+		function hexToRgb(hex) {
+			if (hex.charAt(0) === '#') {
+				hex = hex.substr(1);
+			}
+
+			if (hex.length !== 3 && hex.length !== 6) {
+				throw new Error('Invalid hexadecimal color provided.');
+			}
+
+			if (hex.length === 3) {
+				hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+			}
+
+			const rgb = [];
+			for (let i = 0; i <= 2; i++) {
+				rgb[i] = parseInt(hex.substr(i * 2, 2), 16);
+			}
+
+			return rgb;
+		}
+
+		var socket;
+
+		const terminal = new Terminal();
+		const fitAddon = new FitAddon.FitAddon();
+		const webGLAddon = new WebglAddon.WebglAddon();
+		const webLinkAddon = new WebLinksAddon.WebLinksAddon();
+
+		webGLAddon.onContextLoss(e => {
+			console.log("WebglAddon onContextLoss");
+			webGLAddon.dispose();
+		});
+
+		terminal.loadAddon(webGLAddon);
+		terminal.loadAddon(fitAddon);
+		terminal.loadAddon(webLinkAddon);
+
+		$(() => {
+			let rgb = generateRandomFullSaturationBrightnessColor();
+			let hex = rgbToHex(rgb[0], rgb[1], rgb[2]);
+			$("#color_picker").val(hex);
+
+			Coloris({
+				themeMode: 'dark',
+				alpha: false,
+				el: "#color_picker",
+				defaultColor: hex,
+			});
+
+			terminal.open(document.getElementById("terminal"));
+
+			window.addEventListener("resize", (event) => {
+				fitAddon.fit();
+			});
+
+			fitAddon.fit();
+
+			socket = io();
+			socket.on("color", function (data) {
+				console.log(data);
+				terminal.writeln("Someone requested R: " + data.r + " G: " + data.g + " B: " + data.b);
+			});
+
+			socket.on("disconnect", () => {
+				terminal.writeln("Disconnected");
+			});
+
+			$("#btn_random").on("click", () => {
+				let rgb = generateRandomFullSaturationBrightnessColor();
+				let hex = rgbToHex(rgb[0], rgb[1], rgb[2]);
+				$("#color_picker").val(hex);
+				$("#color_picker")[0].dispatchEvent(new Event('input', { bubbles: true }));
+			});
+
+			$("#btn_send").on("click", () => {
+				const hex = $("#color_picker").val();
+				const rgb = hexToRgb(hex);
+				console.log("Input is: " + hex);
+				console.log(rgb);
+
+				$.ajax({
+					type: "POST",
+					url: "/api/set_color",
+					data: JSON.stringify({ r: rgb[0], g: rgb[1], b: rgb[2] }),
+					contentType: "application/json; charset=utf-8",
+					dataType: "text",
+					success: function (data, textStatus, jqXHR) {
+						console.log("Success");
+						toastr.success("Color sent");
+					},
+					error: function (jqXHR, textStatus, errorThrown) {
+						if (jqXHR.status === 429) {
+							console.log("Rate limited");
+							toastr.warning("Please wait a few seconds before trying to change the color again");
+						} else if (jqXHR.status !== 200) {
+							console.log("Server did a fucky wucky");
+							toastr.error("Could not send color");
+						}
+					}
+				});
+			});
+		});
+	</script>
+
+	<style>
+		#console_row {
+			height: 400px;
+		}
+	</style>
+</head>
+
+<body>
+	<div class="container">
+		<div class="row">
+			<h1>Control our lights</h1>
+		</div>
+		<div class="row mt-2">
+			<div class="col-md-6 col-sm-12">
+				<div class="float-end">
+					<input type="text" id="color_picker" class="form-control">
+					<button class="btn btn-primary" id="btn_random">Randomise</button>
+				</div>
+			</div>
+			<div class="col-md-6 col-sm-12">
+				<button class="btn btn-primary w-100" id="btn_send">Send</button>
+			</div>
+		</div>
+		<div class="row mt-2">
+			<h3>Live logs</h3>
+		</div>
+		<div class="row" id="console_row">
+			<div id="terminal"></div>
+		</div>
+		<div class="row mt-4">
+			Note that even tho the website might be up we might not have the application running on our computers that
+			allows you to control the lights, if so check back later
+		</div>
+	</div>
+
+	<script src="/js/preloader_settings.js"></script>
+	<script src="/js/thenolle.preloader.min.js"></script>
+</body>
+
+</html>
