@@ -86,6 +86,19 @@
 			return rgb;
 		}
 
+		function getDateString() {
+			let date_ob = new Date();
+
+			let date = ("0" + date_ob.getDate()).slice(-2);
+			let month = ("0" + (date_ob.getMonth() + 1)).slice(-2);
+			let year = date_ob.getFullYear();
+			let hours = ("0" + date_ob.getHours()).slice(-2);
+			let minutes = ("0" + date_ob.getMinutes()).slice(-2);
+			let seconds = ("0" + date_ob.getSeconds()).slice(-2);
+
+			return year + "-" + month + "-" + date + " " + hours + ":" + minutes + ":" + seconds;
+		}
+
 		var socket;
 
 		const terminal = new Terminal();
@@ -125,7 +138,7 @@
 			socket = io();
 			socket.on("color", function (data) {
 				console.log(data);
-				terminal.writeln("Someone requested R: " + data.r + " G: " + data.g + " B: " + data.b);
+				terminal.writeln("[" + getDateString() + "] Someone requested R: " + data.r + " G: " + data.g + " B: " + data.b);
 			});
 
 			socket.on("disconnect", () => {
