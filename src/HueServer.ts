@@ -23,7 +23,16 @@ export default class HueServer {
 		this.limiter = rateLimit({
 			windowMs: 5 * 1000,
 			max: 1,
-			message: "You can only make 1 request per 5 seconds. Please wait a moment and try again."
+			message: "You can only make 1 request per 5 seconds. Please wait a moment and try again.",
+			keyGenerator: function (req, res) {
+				let ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+				if (typeof ip === 'string') {
+					ip = ip.split(',')[0].trim();
+				} else if (Array.isArray(ip)) {
+					ip = ip[0].split(',')[0].trim();
+				}
+				return ip;
+			}
 		});
 
 		this.io.on("connection", (socket: SocketIO.Socket) => {
