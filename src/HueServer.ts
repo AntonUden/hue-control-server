@@ -18,6 +18,7 @@ export default class HueServer {
 		this.io = new SocketIO.Server(this.http);
 		this.express.use(bodyParser.json());
 		this.express.use(morgan('combined'));
+		this.express.set('trust proxy', 1);
 
 		this.limiter = rateLimit({
 			windowMs: 5 * 1000,
